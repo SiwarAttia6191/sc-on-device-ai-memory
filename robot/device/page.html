@@ -1,0 +1,622 @@
+<!doctype html><title>Qdrant Edge Memory Robot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  /* Same palette as the boxes drawn on the feed (see the BGR constants). */
+  :root { --bg:#0b0b0b; --panel:#f0f4f6; --ink:#20262d; --teal:#009688;
+          --violet:#6047ff; --red:#dc244c; --dim:#6b7280; --line:#d9e0e4;
+          --orange:#d97706 }
+  * { box-sizing:border-box }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+              font-family:system-ui,-apple-system,sans-serif;
+              touch-action:manipulation }
+  #app  { height:100%; display:flex; flex-direction:column }
+  /* Keep room for controls below the video in portrait mode. */
+  #view { width:100%; background:#000; object-fit:contain;
+          flex:0 1 auto; min-height:0; max-height:50vh }
+  #side { flex:1; min-height:0; display:flex; flex-direction:column;
+          background:var(--panel) }
+  #panel { flex:1; min-height:0; overflow-y:auto; padding:14px 16px }
+  /* Use a side panel on wider landscape screens. */
+  @media (min-width:640px) and (orientation:landscape) {
+    #app  { flex-direction:row }
+    #view { flex:1; min-width:0; height:100%; max-height:none }
+    #side { flex:0 0 min(400px, 45%) }
+  }
+  #head { display:flex; justify-content:space-between; align-items:baseline;
+          border-bottom:2px solid var(--line); padding-bottom:8px }
+  h1 { font-size:15px; letter-spacing:.14em; margin:0; color:var(--violet) }
+  #count { font-size:14px; color:var(--dim) }
+  #where { font-size:13px; color:var(--dim); margin-top:6px }
+  #label { display:inline-block; margin:14px 0 12px; padding:6px 14px;
+           border-radius:10px; color:#fff; background:var(--dim);
+           font-size:clamp(20px,4.5vw,30px); font-weight:700; line-height:1.15;
+           word-break:break-word }
+  #match { display:flex; align-items:center; gap:12px }
+  figure { margin:0; text-align:center; flex:0 0 auto }
+  figure img { width:76px; height:76px; object-fit:cover; border-radius:8px;
+               background:var(--line); display:block; opacity:0;
+               transition:opacity .2s }
+  figcaption { font-size:11px; color:var(--violet); margin-top:5px }
+  #gauge { flex:1; min-width:0 }
+  #track { position:relative; height:22px; border-radius:5px;
+           background:var(--line); overflow:hidden }
+  #fill { height:100%; width:0; background:var(--red); transition:width .2s }
+  #mark { position:absolute; top:0; bottom:0; width:3px; background:var(--ink) }
+  #nums { display:flex; justify-content:space-between; margin-top:5px;
+          font-size:12px; color:var(--dim) }
+  #score { font-weight:700; color:var(--ink); font-size:15px }
+  #note { font-size:14px; color:var(--dim); font-style:italic; margin-top:12px }
+  .card { border:2px solid var(--dim); border-radius:10px; padding:10px 12px;
+          margin-top:16px }
+  .card h2 { font-size:13px; letter-spacing:.1em; margin:0 0 8px }
+  /* Preserve the full object in recall photos of any aspect ratio. */
+  .sight { margin-top:12px; font-size:14px }
+  .sight .lbl { font-weight:700 }
+  .sight .shot { display:flex; gap:10px; align-items:flex-start;
+                 margin-top:4px }
+  .sight .shot img { width:150px; aspect-ratio:4/3; object-fit:contain;
+                     border-radius:8px; background:var(--line);
+                     flex:0 0 auto }
+  .meta { font-size:12px; color:var(--violet) }
+  #log { margin-top:18px; font-size:12px; color:var(--dim); line-height:1.7 }
+  /* Reserve status space so messages do not move the buttons. */
+  #status { flex:0 0 auto; visibility:hidden; height:38px; padding:9px 16px;
+            background:var(--ink); color:#fff; font-size:14px; line-height:20px;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  #bar { flex:0 0 auto; display:grid; grid-template-columns:1fr 1fr; gap:8px;
+         padding:10px; background:#e2e8ea;
+         padding-bottom:calc(10px + env(safe-area-inset-bottom)) }
+  button { border:0; border-radius:12px; color:#fff; font-weight:700;
+           -webkit-user-select:none; user-select:none; touch-action:none }
+  #teach,#ask { min-height:66px; font-size:clamp(17px,4vw,21px) }
+  #teach { background:var(--teal) }
+  #ask { background:var(--violet) }
+  #memory,#ignore { min-height:44px; font-size:14px; background:var(--dim) }
+  #memory { background:var(--ink) }
+  #teach.off { opacity:.4 }
+  button.rec { box-shadow:0 0 0 4px #fff inset; filter:brightness(1.25) }
+
+  /* Memory browsing replaces the live view on small screens. */
+  #mem { position:fixed; inset:0; z-index:9; background:var(--panel);
+         display:none; flex-direction:column }
+  #mem.on { display:flex }
+  #memhead { flex:0 0 auto; display:flex; align-items:center; gap:10px;
+             border-bottom:2px solid var(--line); background:#e2e8ea;
+             padding:calc(10px + env(safe-area-inset-top)) 12px 10px }
+  #memhead h1 { flex:0 0 auto }
+  #memmeta { flex:1; font-size:13px; color:var(--dim) }
+  #memclose { background:var(--ink); min-height:40px; padding:0 18px;
+              font-size:14px }
+  /* Auto-fill keeps cards readable across phone and laptop widths. Explicit
+     max-content rows prevent cards from being clipped in this fixed-height grid. */
+  #memlist { flex:1; min-height:0; overflow-y:auto;
+             -webkit-overflow-scrolling:touch; display:grid; gap:12px;
+             align-content:start; grid-auto-rows:max-content; padding:12px;
+             max-width:1200px; width:100%; margin:0 auto;
+             grid-template-columns:repeat(auto-fill, minmax(170px, 1fr));
+             padding-bottom:calc(24px + env(safe-area-inset-bottom)) }
+  .obj { border:2px solid var(--line); border-radius:12px; background:#fff;
+         overflow:hidden }
+  /* Show the full object rather than cropping tall or wide scene images. */
+  .obj img { display:block; width:100%; aspect-ratio:4/3; object-fit:contain;
+             background:var(--line) }
+  .obj .body { padding:9px 11px }
+  .name { font-size:17px; font-weight:700; word-break:break-word }
+  .said { font-size:13px; color:var(--dim); font-style:italic; margin-top:3px }
+  /* Keep counts and destructive controls on predictable rows. */
+  .foot { display:flex; align-items:center; gap:8px; margin-top:9px;
+          flex-wrap:wrap }
+  .foot .meta { flex:1 0 100% }
+  /* Destructive controls fill red only after the first confirmation tap. */
+  .obj button { flex:1 1 0; min-width:0; min-height:36px; padding:0 8px;
+                font-size:12px; background:#fff; color:var(--violet);
+                border:2px solid var(--violet) }
+  /* Repeat `.obj button` so these modifiers win the cascade. */
+  .obj button.del { color:var(--red); border-color:var(--red) }
+  .obj button.drop { flex:1 0 100%; color:var(--dim);
+                     border-color:var(--line) }
+  .obj button.un { flex:1 0 100%; color:var(--teal); border-color:var(--teal) }
+  .obj button.armed { background:var(--red); color:#fff;
+                      border-color:var(--red) }
+  .obj button[disabled] { opacity:.5 }
+  .edit { width:100%; font-family:inherit; font-size:17px; font-weight:700;
+          padding:3px 5px; border-radius:6px; border:2px solid var(--violet) }
+  /* Location spans the grid above the object cards. */
+  #loc { grid-column:1/-1; display:flex; align-items:center; gap:10px;
+         min-height:40px; font-size:14px; color:var(--ink) }
+  #loc button { flex:0 0 auto; min-height:36px; padding:0 12px;
+                font-size:12px; background:#fff; color:var(--violet);
+                border:2px solid var(--violet); border-radius:12px }
+  /* iOS Safari zooms inputs smaller than 16 px. */
+  #loc .edit { flex:1; font-size:16px; font-weight:400 }
+  /* Let ignored cards join the object grid. */
+  #igns { display:contents }
+  #igns h2, .wide { grid-column:1/-1; font-size:13px; letter-spacing:.1em;
+                    color:var(--dim); margin:8px 0 0 }
+</style>
+<div id="app">
+  <img id="view" src="/stream">
+  <div id="side">
+    <div id="panel">
+      <div id="head"><h1>ROBOT MEMORY</h1><span id="count"></span></div>
+      <div id="where"></div>
+      <div id="label">looking&hellip;</div>
+      <div id="match">
+        <figure><img id="thumbA"><figcaption>remembers</figcaption></figure>
+        <div id="gauge">
+          <div id="track"><div id="fill"></div><div id="mark"></div></div>
+          <div id="nums"><span id="score"></span><span id="thr"></span></div>
+        </div>
+        <figure><img id="thumbB"><figcaption>sees now</figcaption></figure>
+      </div>
+      <div id="note"></div>
+      <div id="card"></div>
+      <div id="log"></div>
+    </div>
+    <div id="status"></div>
+    <div id="bar">
+      <button id="teach">HOLD&nbsp;&middot;&nbsp;TEACH</button>
+      <button id="ask">HOLD&nbsp;&middot;&nbsp;ASK</button>
+      <button id="memory">MEMORY</button>
+      <button id="ignore">IGNORE</button>
+    </div>
+  </div>
+</div>
+<div id="mem">
+  <div id="memhead">
+    <h1>MEMORY</h1><span id="memmeta"></span>
+    <button id="memclose">CLOSE</button>
+  </div>
+  <div id="memlist"></div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  const img = $('view');
+  // Pause the hidden feed while memory thumbnails use the connection.
+  let paused = false;
+  img.onerror = () => setTimeout(() => {
+    if (!paused) img.src = '/stream?' + Date.now();
+  }, 1000);
+
+  let lock = null;
+  const wake = async () => { try { lock = await navigator.wakeLock.request('screen'); } catch (e) {} };
+  wake();
+  addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wake(); });
+
+  // Laptop keys use the computer's microphone. Reload stays keyboard-only.
+  addEventListener('keydown', e => {
+    // Do not treat text entered in an edit field as robot commands.
+    const tag = e.target && e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable)
+      return;
+    const k = e.key.toLowerCase();
+    if ('tarfq'.includes(k)) fetch('/key?k=' + k);
+    if (k === 'm') $('mem').classList.contains('on') ? closeMem() : openMem();
+    if (k === 'escape') closeMem();
+  });
+  $('ignore').onclick = () => fetch('/key?k=q');
+
+  // ---- the panel: /state, four times a second -----------------------------
+  // Use textContent because labels and notes contain speech transcripts.
+  const el = (tag, text, cls) => {
+    const n = document.createElement(tag);
+    if (text != null) n.textContent = text;
+    if (cls) n.className = cls;
+    return n;
+  };
+  // Similarity scores below 0.5 are outside the useful calibrated range.
+  const pct = v => Math.max(0, Math.min(1, (v - 0.5) / 0.5)) * 100;
+  // Stamped thumbnail names change only when the remembered image changes.
+  const setImg = (n, url) => {
+    n.style.opacity = url ? 1 : 0;
+    if (url && n.dataset.url !== url) { n.dataset.url = url; n.src = url; }
+  };
+
+  let shownSeq = null, statusAt = 0, shownCard = '', curGuess = null;
+  function render(s) {
+    $('count').textContent = s.count + ' memories';
+    $('where').textContent = s.where ? 'here: ' + s.where : '';
+    const f = s.focus;
+    const known = f && f.label;
+    // Teal is recognized, orange is a tappable near match, and red is unknown.
+    curGuess = f && !f.label ? f.guess : null;
+    $('label').textContent = f ? (f.label ||
+        (curGuess ? curGuess + '? \u2014 tap to confirm'
+                  : 'UNKNOWN \u2014 hold TEACH'))
+                               : 'looking\u2026';
+    $('label').style.cursor = curGuess ? 'pointer' : '';
+    $('label').style.background =
+      f ? (known ? 'var(--teal)' : f.guess ? 'var(--orange)' : 'var(--red)')
+        : 'var(--dim)';
+    $('fill').style.width = (f ? pct(f.score) : 0) + '%';
+    $('fill').style.background =
+      f && f.score >= s.threshold ? 'var(--teal)'
+        : f && f.guess ? 'var(--orange)' : 'var(--red)';
+    $('mark').style.left = pct(s.threshold) + '%';
+    $('score').textContent = f && f.score ? f.score.toFixed(3) : '';
+    $('thr').textContent = 'bar ' + s.threshold.toFixed(2);
+    setImg($('thumbA'), f && f.thumb ? '/thumb?f=' + f.thumb : null);
+    $('note').textContent = f && f.note ? '\u201c' + f.note + '\u201d' : '';
+    // Show whether the current object can be taught.
+    $('teach').classList.toggle('off', !s.teachable);
+
+    const key = JSON.stringify(s.card);
+    if (key !== shownCard) { shownCard = key; drawCard(s.card); }
+
+    const log = $('log');
+    log.replaceChildren();
+    if (s.events.length) log.append(el('div', 'memory writes'));
+    for (const e of s.events) log.append(el('div', e));
+
+    // Status messages fade after they have been read.
+    const msg = s.status || (s.busy ? 'working\u2026' : '');
+    // A sequence number distinguishes repeated messages.
+    if (s.status_seq !== shownSeq) {
+      statusAt = shownSeq === null ? 0 : Date.now();
+      shownSeq = s.status_seq;
+    }
+    const show = msg && (s.busy || Date.now() - statusAt < 6000);
+    // Keep the reserved status row in the layout while hidden.
+    $('status').style.visibility = show ? 'visible' : 'hidden';
+    $('status').textContent = msg;
+  }
+
+  function drawCard(c) {
+    const box = $('card');
+    box.replaceChildren();
+    if (!c) return;
+    const card = el('div', null, 'card');
+    if (c.kind === 'taught') {
+      card.style.borderColor = 'var(--teal)';
+      const h = el('h2', 'MEMORY WRITTEN'); h.style.color = 'var(--teal)';
+      card.append(h, el('div', 'vectors: image + text'));
+      if (c.where) card.append(el('div', 'here: ' + c.where, 'meta'));
+      card.append(el('div', '\u201c' + c.transcript + '\u201d'));
+    } else if (c.kind === 'forgot') {
+      card.style.borderColor = 'var(--red)';
+      const h = el('h2', 'MEMORY DELETED'); h.style.color = 'var(--red)';
+      card.append(h, el('div', '"' + c.label + '" \u00b7 ' + c.n + ' point(s) removed'));
+    } else {
+      card.style.borderColor = 'var(--violet)';
+      const h = el('h2', 'RECALL'); h.style.color = 'var(--violet)';
+      card.append(h, el('div', 'Q: \u201c' + c.q + '\u201d'));
+      card.append(el('div', c.say, 'meta'));
+      // Show the newest sightings, or one row per object for an inventory.
+      for (const hit of c.hits) {
+        const s = el('div', null, 'sight');
+        s.append(el('div', hit.label || 'unknown', 'lbl'));
+        const shot = el('div', null, 'shot');
+        if (hit.thumb) {
+          const im = el('img'); im.src = '/thumb?f=' + hit.thumb;
+          im.style.opacity = 1; shot.append(im);
+        }
+        const col = el('div');
+        col.append(el('div', hit.when +
+          (hit.kind ? ' \u00b7 ' + (hit.kind === 'taught' ? 'taught' : 'seen')
+                    : '')));
+        if (hit.where) col.append(el('div', hit.where, 'meta'));
+        shot.append(col);
+        s.append(shot);
+        card.append(s);
+      }
+    }
+    box.append(card);
+  }
+
+  (async function poll() {
+    for (;;) {
+      try { render(await (await fetch('/state')).json()); } catch (e) {}
+      await new Promise(r => setTimeout(r, 250));
+    }
+  })();
+  // The server rechecks this displayed guess because focus can move mid-tap.
+  $('label').onclick = () => {
+    if (curGuess) fetch('/confirm?label=' + encodeURIComponent(curGuess),
+                        { method: 'POST' }).catch(() => {});
+  };
+  // Refresh the focused crop once per second for comparison.
+  setInterval(() => { $('thumbB').src = '/crop.jpg?' + Date.now(); }, 1000);
+  $('thumbB').onload  = () => { $('thumbB').style.opacity = 1; };
+  $('thumbB').onerror = () => { $('thumbB').style.opacity = 0; };
+
+  // Hold TEACH / ASK to record from THIS device's mic and upload one WAV.
+  const WORKLET = URL.createObjectURL(new Blob([
+    "class Rec extends AudioWorkletProcessor{process(i){const c=i[0][0];" +
+    "if(c)this.port.postMessage(c.slice(0));return true}}" +
+    "registerProcessor('rec',Rec)"], {type:'text/javascript'}));
+  let ctx, stream, chunks = [], holding = false, rate = 16000;
+
+  // Keep one microphone context open so recording starts without clipping.
+  // Request Whisper's 16 kHz rate, but record the browser's actual rate.
+  let micReady;
+  function mic() {
+    // Memoize the in-flight setup and allow a retry after failure.
+    if (!micReady) micReady = openMic().catch(e => { micReady = null; throw e; });
+    return micReady;
+  }
+  async function openMic() {
+    // Close a dead context before creating its replacement.
+    if (ctx) { ctx.close().catch(() => {}); ctx = null; }
+    stream = await navigator.mediaDevices.getUserMedia(
+      { audio: { echoCancellation: true, noiseSuppression: true } });
+    ctx = new (window.AudioContext || window.webkitAudioContext)(
+      { sampleRate: 16000 });
+    await ctx.resume();
+    await ctx.audioWorklet.addModule(WORKLET);
+    rate = ctx.sampleRate;
+    const node = new AudioWorkletNode(ctx, 'rec');
+    node.port.onmessage = e => { if (holding) chunks.push(e.data); };
+    ctx.createMediaStreamSource(stream).connect(node);
+    // Reopen the microphone after permission or device changes end its track.
+    stream.getTracks().forEach(t => { t.onended = () => { micReady = null; }; });
+  }
+  // Browser permissions require a gesture, so warm on the first touch.
+  addEventListener('pointerdown', () => mic().catch(() => {}), { once: true });
+
+  async function start(kind, btn) {
+    if (holding) return;
+    holding = true; chunks = []; btn.classList.add('rec');
+    fetch('/listen?k=' + kind);   // narrate "LISTENING" on the filmed view
+    try {
+      await mic();
+      // Backgrounded tabs may suspend audio until another gesture resumes it.
+      if (ctx.state !== 'running') await ctx.resume();
+    } catch (e) {
+      holding = false; btn.classList.remove('rec'); alert('mic unavailable: ' + e);
+    }
+  }
+  function stop(kind, btn) {
+    if (!holding) return;
+    holding = false; btn.classList.remove('rec');
+    // Keep the stream open so the next press starts immediately.
+    fetch('/audio?k=' + kind, { method: 'POST', body: encodeWav(chunks, rate) });
+  }
+  function encodeWav(chunks, rate) {
+    const n = chunks.reduce((a, c) => a + c.length, 0);
+    const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const s = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    s(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); s(8, 'WAVE'); s(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true);
+    v.setUint16(32, 2, true); v.setUint16(34, 16, true); s(36, 'data');
+    v.setUint32(40, n * 2, true);
+    let o = 44;
+    for (const c of chunks) for (let i = 0; i < c.length; i++, o += 2) {
+      const x = Math.max(-1, Math.min(1, c[i]));
+      v.setInt16(o, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+    }
+    return buf;
+  }
+  for (const [id, k] of [['teach', 't'], ['ask', 'a']]) {
+    const btn = $(id);
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); start(k, btn); });
+    btn.addEventListener('pointerup',   e => { e.preventDefault(); stop(k, btn); });
+    btn.addEventListener('pointercancel', () => stop(k, btn));
+  }
+
+  // ---- the memory tab -----------------------------------------------------
+  const PAGE_N = 12;
+  const igns = el('div');
+  igns.id = 'igns';
+  const loc = el('div');
+  loc.id = 'loc';
+  let locWhere = null;
+  let memAt = 0, memMore = true, memBusy = false, memGen = 0;
+
+  function openMem() {
+    $('mem').classList.add('on');
+    // Free bandwidth while the video is hidden.
+    paused = true; img.removeAttribute('src');
+    $('memlist').replaceChildren(loc, igns);
+    drawLoc();
+    // The generation counter discards pages from before this reload.
+    memAt = 0; memMore = true; memBusy = false; memGen++;
+    loadPage();
+    loadIgnored();
+  }
+  function closeMem() {
+    if (!$('mem').classList.contains('on')) return;
+    $('mem').classList.remove('on');
+    paused = false; img.src = '/stream?' + Date.now();
+  }
+  $('memory').onclick = openMem;
+  $('memclose').onclick = closeMem;
+
+  async function loadPage() {
+    if (memBusy || !memMore) return;
+    memBusy = true;
+    const gen = memGen;
+    try {
+      const r = await (await fetch(
+        '/memories?offset=' + memAt + '&limit=' + PAGE_N)).json();
+      if (gen !== memGen) return;   // the list was reloaded under us
+      $('memmeta').textContent =
+        r.total + ' object' + (r.total === 1 ? '' : 's') + ' \u00b7 ' +
+        r.points + ' points';
+      locWhere = r.where || null;
+      // Do not replace a location edit while the user is typing.
+      if (!loc.contains(document.activeElement)) drawLoc();
+      const list = $('memlist');
+      // Keep ignored cards after paginated object cards.
+      for (const o of r.objects) list.insertBefore(objCard(o), igns);
+      memAt += r.objects.length;
+      // A short page also marks the end if an object was deleted mid-scroll.
+      memMore = r.objects.length === PAGE_N && memAt < r.total;
+      if (!r.total) list.insertBefore(
+        el('div', 'Nothing taught yet. Point the camera at something and hold '
+                  + 'TEACH.', 'wide'), igns);
+    // Only the current generation owns the loading flag.
+    } catch (e) {} finally { if (gen === memGen) memBusy = false; }
+  }
+  $('memlist').addEventListener('scroll', () => {
+    const n = $('memlist');
+    if (n.scrollTop + n.clientHeight > n.scrollHeight - 500) loadPage();
+  });
+
+  function objCard(o) {
+    const card = el('div', null, 'obj');
+    const pic = el('img'), said = el('div', null, 'said');
+    const cap = el('div', null, 'meta');
+    // Cycle through taught views first, then recent sightings.
+    const sights = o.sightings || [];
+    const entries = o.views.concat(sights);
+    let i = 0;
+    const drop = armedBtn('DROP THIS VIEW', 'drop', () =>
+      post('/forget_view?id=' + entries[i].id +
+           '&label=' + encodeURIComponent(o.label)));
+    const show = () => {
+      const v = entries[i], taught = i < o.views.length;
+      pic.src = '/thumb?f=' + encodeURIComponent(v.scene || v.thumb || '');
+      said.textContent = v.transcript ? '\u201c' + v.transcript + '\u201d' : '';
+      // Use one count across taught views and sightings.
+      cap.textContent = (i + 1) + ' of ' + entries.length +
+        ' \u00b7 ' + (taught ? 'taught' : 'seen') +
+        ' \u00b7 ' + v.when + (v.where ? ' \u00b7 ' + v.where : '');
+      // The last taught view can only be removed by forgetting the object.
+      drop.style.display = (taught && o.views.length < 2) ? 'none' : '';
+    };
+    // Changing the visible image disarms deletion of the previous one.
+    pic.onclick = () => {
+      i = (i + 1) % entries.length; show(); drop.disarm();
+    };
+    show();
+    const name = el('div', o.label, 'name');
+    const foot = el('div', null, 'foot');
+    foot.append(el('div', o.seen + ' sighting' + (o.seen === 1 ? '' : 's'), 'meta'),
+                renameBtn(o.label, name),
+                armedBtn('FORGET', 'del', () =>
+                  post('/forget?label=' + encodeURIComponent(o.label))));
+    // `show` hides this for an object's only taught view.
+    foot.append(drop);
+    const body = el('div', null, 'body');
+    body.append(name, said, cap, foot);
+    card.append(pic, body);
+    return card;
+  }
+
+  const post = url => fetch(url, { method: 'POST' }).catch(() => {});
+
+  // ---- location: where the robot is -----------------------------------
+  // Location changes affect future memories; existing points keep theirs.
+  function drawLoc() {
+    const b = el('button', locWhere ? 'CHANGE' : 'SET LOCATION');
+    b.onclick = editLoc;
+    loc.replaceChildren(
+      el('span', locWhere ? 'here: ' + locWhere : 'location not set'), b);
+  }
+  function editLoc() {
+    const inp = document.createElement('input');
+    // The global key handler ignores this input.
+    inp.className = 'edit'; inp.value = locWhere || ''; inp.maxLength = 40;
+    inp.placeholder = 'e.g. hotel room, booth 12';
+    inp.autocapitalize = 'none'; inp.spellcheck = false;
+    loc.replaceChildren(inp);
+    inp.focus(); inp.select();
+    let done = false;
+    // Guard against Enter followed by the resulting blur.
+    const finish = async save => {
+      if (done) return;
+      done = true;
+      const to = inp.value.trim();
+      if (save && to !== (locWhere || '')) {
+        // an empty value is a real request: it clears the location
+        await post('/where?to=' + encodeURIComponent(to));
+        openMem();  // redraw from the robot's answer, not our guess
+      } else {
+        drawLoc();
+      }
+    };
+    inp.onkeydown = e => {
+      if (e.key === 'Enter') finish(true);
+      if (e.key === 'Escape') finish(false);
+    };
+    inp.onblur = () => finish(true);
+  }
+
+  function armedBtn(text, cls, action) {
+    const b = el('button', text, cls);
+    let armed = 0;
+    b.disarm = () => {
+      armed = 0; b.textContent = text; b.classList.remove('armed');
+    };
+    b.onclick = async () => {
+      // Require a second tap because deletion cannot be undone.
+      if (Date.now() > armed) {
+        armed = Date.now() + 4000;
+        b.textContent = 'SURE?';
+        b.classList.add('armed');
+        setTimeout(() => {
+          if (Date.now() > armed) {
+            b.textContent = text; b.classList.remove('armed');
+          }
+        }, 4200);
+        return;
+      }
+      b.disabled = true;
+      await action();
+      openMem();  // redraw from the shard, so the count is the robot's, not ours
+    };
+    return b;
+  }
+
+  // Rename in place without discarding learned views.
+  function renameBtn(label, name) {
+    const b = el('button', 'RENAME', 'ren');
+    b.onclick = () => {
+      const inp = document.createElement('input');
+      inp.className = 'edit'; inp.value = label; inp.maxLength = 40;
+      inp.autocapitalize = 'none'; inp.spellcheck = false;
+      name.replaceWith(inp);
+      inp.focus(); inp.select();
+      let done = false;
+      // Guard against Enter followed by the resulting blur.
+      const finish = async save => {
+        if (done) return;
+        done = true;
+        const to = inp.value.trim();
+        // Capitalization-only changes are valid for older shards.
+        if (save && to && to !== label) {
+          await post('/rename?label=' + encodeURIComponent(label) +
+                     '&to=' + encodeURIComponent(to));
+          openMem();
+        } else {
+          inp.replaceWith(name);
+        }
+      };
+      inp.onkeydown = e => {
+        if (e.key === 'Enter') finish(true);
+        if (e.key === 'Escape') finish(false);
+      };
+      inp.onblur = () => finish(true);
+    };
+    return b;
+  }
+
+  async function loadIgnored() {
+    igns.replaceChildren();
+    const gen = memGen;
+    let r;
+    try { r = await (await fetch('/ignored')).json(); } catch (e) { return; }
+    if (gen !== memGen) return;   // same staleness guard as loadPage
+    if (!r.ignored.length) return;
+    igns.append(el('h2', 'IGNORED \u00b7 ' + r.ignored.length));
+    for (const g of r.ignored) {
+      const card = el('div', null, 'obj');
+      const pic = el('img');
+      if (g.thumb) pic.src = '/thumb?f=' + encodeURIComponent(g.thumb);
+      const b = el('button', 'TRACK AGAIN', 'un');
+      b.onclick = async () => {
+        b.disabled = true;
+        // pid stays the string the server sent -- point ids exceed 2^53
+        try { await fetch('/unignore?pid=' + g.pid, { method: 'POST' }); } catch (e) {}
+        loadIgnored();
+      };
+      const foot = el('div', null, 'foot');
+      foot.append(el('div', 'ignored ' + g.when, 'meta'), b);
+      const body = el('div', null, 'body');
+      body.append(foot);
+      card.append(pic, body);
+      igns.append(card);
+    }
+  }
+</script>
