@@ -1,12 +1,12 @@
-# Short Course: Building on-device AI memory in partnership with Qdrant
+# Short Course: Building AI Assistants with On-Device Memory in partnership with Qdrant
 
 # Qdrant Edge Memory Robot
 
 ![The Qdrant Edge Memory Robot: a printed desktop enclosure with a camera behind its visor](assets/robot-render.gif)
 
-The Qdrant Edge Memory Robot sees an object, learns its name from your voice, and remembers where it saw it. Detection, speech recognition, embeddings, and vector search all run on the device. It needs no cloud service, API key, or large language model.
+The Qdrant Edge Memory Robot sees an object, learns its name from your voice, and remembers where and when it saw it. Detection, speech recognition, embeddings, and vector search all run on the device, no cloud service, API key, or large language model required.
 
-This project is the physical continuation of the DeepLearning.AI short course [Building On-Device AI Memory with Qdrant Edge](https://github.com/Dylancouzon/SC-Qdrant-C3). The course builds the memory layer in notebooks. This repository connects that layer to a camera, microphone, object detector, and browser interface.
+This project is the physical continuation of the DeepLearning.AI short course [Building AI Assistants with On-Device Memory](https://learn.deeplearning.ai/courses/building-ai-assistants-with-on-device-memory/lesson/wr5jeg/introduction), which builds the memory layer in the notebooks. This repository connects that layer to a camera, microphone, object detector, and browser interface.
 
 ## Start Here
 
