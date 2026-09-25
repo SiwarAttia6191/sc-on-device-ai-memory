@@ -1,0 +1,23 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Local Python environment and generated caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Runtime memory and generated application state
+edge-data/
+
+# Downloaded detector weights
+/yoloe-11l-seg-pf.pt
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
