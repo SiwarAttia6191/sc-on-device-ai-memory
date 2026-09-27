@@ -84,7 +84,23 @@ uv run python -m unittest discover -s tests -t .
 
 ## Where Data Lives
 
-The local Qdrant Edge shard and its thumbnails live in `edge-data/`. This directory is ignored by Git. Start once with an empty shard by adding `--reset`:
+By default, the local Qdrant Edge shard and its thumbnails live in `edge-data/` under the repository. The app creates this directory automatically, and it is ignored by Git. On Windows, if the repository is inside a OneDrive-synced folder, use a local AppData directory instead:
+
+```powershell
+uv run python -m robot.app --data "$env:LOCALAPPDATA\qdrant-edge-memory"
+```
+
+Always use the same `--data` path to reopen the same memory database. A different path starts or opens a different shard.
+
+To tag new memories from one run with a location such as `Cafe`, add `--location`:
+
+```powershell
+uv run python -m robot.app --data "$env:LOCALAPPDATA\qdrant-edge-memory" --location "Cafe"
+```
+
+`--location` applies to memories and sightings created during that run; it does not change older records. Set the location in the **MEMORY** view if you want the selected location saved with the shard for future runs.
+
+Start with an empty shard by adding `--reset`:
 
 ```bash
 uv run python -m robot.app --reset
