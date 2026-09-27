@@ -28,6 +28,7 @@ from robot.device import mic
 from robot.device.draw import BG, INK, VIOLET, draw_feed, text
 from robot.device.runtime import UTTERANCE_WAV, stamp, when
 from robot.device.server import StreamHandler, ensure_cert, lan_ip
+from robot.observability import emit_event
 
 PORT = 8765
 STREAM_QUALITY = 85
@@ -522,6 +523,7 @@ class LiveApp:
                      "permission?)" if rms == 0 else ""))
             silent = mic.is_silent(wav) if heard is None else not heard
             if silent:
+                emit_event("audio_rejected", reason="silent")
                 self.banner = "didn't hear anything, try again"
                 return
             self.banner = "thinking..."
@@ -558,13 +560,12 @@ class LiveApp:
                     self.mem_count = self.robot.memory.count()
                     if self.pending_track is not None:
                         self.pending_track.requery_now()
-                print(f'taught "{taught["label"]}": '
-                      f'{taught["transcript"]!r}')
+                    emit_event("voice_action_confirmed", action="teach")
                 self.card = ("taught", taught)
                 self.banner = f'taught: "{taught["label"]}"'
             else:
                 res = self.robot.ask(transcript)
-                print(f"asked: {transcript!r}")
+                emit_event("voice_action_confirmed", action="ask")
                 self.card = ("answer", (transcript, res))
                 self.banner = None
                 _speak(res)
@@ -578,6 +579,7 @@ class LiveApp:
             if self.voice_review is None or self.busy:
                 return False
             self.voice_review = None
+        emit_event("transcript_discarded")
         self.banner = "transcript discarded"
         return True
 

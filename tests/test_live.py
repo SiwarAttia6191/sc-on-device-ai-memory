@@ -85,11 +85,13 @@ class LiveAppTests(unittest.TestCase):
         app.robot.memory.count.assert_called_once_with()
         self.assertFalse(app.busy)
 
-    def test_discard_transcript_does_not_call_robot(self):
+    @patch("robot.device.live.emit_event")
+    def test_discard_transcript_does_not_call_robot(self, emit_event):
         app = self.voice_review_app("t", target=("crop", None, None))
 
         self.assertTrue(app.discard_transcript())
         self.assertIsNone(app.voice_review)
+        emit_event.assert_called_once_with("transcript_discarded")
         app.robot.teach.assert_not_called()
         app.robot.ask.assert_not_called()
 

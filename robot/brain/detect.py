@@ -11,6 +11,7 @@ import numpy as np
 
 from robot import config
 from robot.brain.face_landmarks import FaceLandmarkDetector
+from robot.observability import measure_stage
 
 os.environ.setdefault("YOLO_AUTOINSTALL", "false")  # no pip calls at runtime
 
@@ -207,20 +208,21 @@ class Detector:
     def process(self, frame, now=None):
         """Run detection on one frame; returns the live stable tracks."""
         now = now or time.time()
-        with autorelease_pool():
-            results = self.model.track(
-                frame,
-                device=self.device,
-                quantize=self.quantize,  # fp16 on CUDA, see quantize_for
-                conf=self.conf,
-                imgsz=IMGSZ,
-                max_det=MAX_DET,
-                agnostic_nms=True,
-                persist=True,
-                verbose=False,
-                # ultralytics >= 8.4 defaults to a tracker that attaches no ids
-                tracker="botsort.yaml",
-            )[0]
+        with measure_stage("object_detection", model="yoloe", device=self.device):
+            with autorelease_pool():
+                results = self.model.track(
+                    frame,
+                    device=self.device,
+                    quantize=self.quantize,  # fp16 on CUDA, see quantize_for
+                    conf=self.conf,
+                    imgsz=IMGSZ,
+                    max_det=MAX_DET,
+                    agnostic_nms=True,
+                    persist=True,
+                    verbose=False,
+                    # ultralytics >= 8.4 defaults to a tracker that attaches no ids
+                    tracker="botsort.yaml",
+                )[0]
         h, w = frame.shape[:2]
         seen_tids = set()
         boxes = results.boxes
@@ -260,7 +262,8 @@ class Detector:
 
         if self.face_landmarks is not None:
             try:
-                parts = self.face_landmarks.detect(frame, now)
+                with measure_stage("face_landmarks", model="mediapipe"):
+                    parts = self.face_landmarks.detect(frame, now)
             except Exception as exc:  # noqa: BLE001 - keep object detection live
                 print(f"face landmarks disabled after runtime error: {exc}",
                       flush=True)

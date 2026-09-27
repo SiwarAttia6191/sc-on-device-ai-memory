@@ -59,6 +59,9 @@ or worker threads.
   workers, browser-server startup, and synchronization around live state.
 - `robot/device/server.py` and `robot/device/page.html` implement the HTTP
   routes, MJPEG stream, state polling, and browser controls.
+- `robot/observability.py` emits privacy-safe JSONL stage timings and outcome
+  events. Do not add transcripts, audio, image pixels, or face landmarks to
+  these records.
 
 The runtime flow is:
 

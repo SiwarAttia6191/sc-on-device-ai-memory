@@ -8,6 +8,7 @@ import cv2
 from robot.brain import labels, models
 from robot.brain.detect import Detector
 from robot.brain.memory import RECOGNIZE_THRESHOLD, Memory
+from robot.observability import measure_stage
 
 
 def day_start_ts():
@@ -91,7 +92,8 @@ class Robot:
         for t in tracks:
             if t.due_for_query(now):
                 t.vec = models.embed_crop(t.crop)
-                hit, score, guess = self.memory.recognize(t.vec)
+                with measure_stage("image_retrieval", operation="recognize"):
+                    hit, score, guess = self.memory.recognize(t.vec)
                 t.score = score
                 t.label = hit.payload["label"] if hit else None
                 # Near matches are displayed as guesses, never as recognition.
@@ -286,10 +288,12 @@ class Robot:
         # Explicit object names narrow the semantic search when present.
         qv = models.embed_query(question)
         named = self.memory.names_in(question)
-        hit = self.memory.best_taught(qv, labels=named)
+        with measure_stage("text_retrieval", operation="best_taught"):
+            hit = self.memory.best_taught(qv, labels=named)
         if hit is None and named:
             # The named object may have been forgotten between the two reads.
-            hit = self.memory.best_taught(qv)
+            with measure_stage("text_retrieval", operation="fallback"):
+                hit = self.memory.best_taught(qv)
         if hit is None:
             return {"inventory": False, "label": None, "note": None,
                     "score": 0.0, "sightings": []}

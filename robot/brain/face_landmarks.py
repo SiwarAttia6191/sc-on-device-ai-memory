@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from math import ceil, floor, isfinite
 from pathlib import Path
 
+from robot.observability import emit_event
+
 MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
     "face_landmarker/float16/latest/face_landmarker.task"
@@ -96,6 +98,7 @@ class FaceLandmarkDetector:
         self._landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
             options)
         self._last_timestamp = -1
+        self._face_present = None
 
     def detect(self, frame, now):
         import cv2
@@ -107,7 +110,11 @@ class FaceLandmarkDetector:
         timestamp = max(int(now * 1000), self._last_timestamp + 1)
         self._last_timestamp = timestamp
         result = self._landmarker.detect_for_video(image, timestamp)
-        if not result.face_landmarks:
+        found = bool(result.face_landmarks)
+        if found != self._face_present:
+            emit_event("face_found" if found else "no_face_found")
+            self._face_present = found
+        if not found:
             return []
         return face_part_boxes(result.face_landmarks[0], width, height)
 

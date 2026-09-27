@@ -7,6 +7,8 @@ import threading
 from functools import lru_cache
 from pathlib import Path
 
+from robot.observability import measure_stage
+
 NOMIC_MODEL = "nomic-ai/nomic-embed-text-v1.5"
 NOMIC_DIM = 768
 CLIP_VISION_MODEL = "Qdrant/clip-ViT-B-32-vision"
@@ -62,19 +64,22 @@ def _asr_model():
 
 def embed_text(text):
     """Embed one transcript for storage. Nomic, 768-d."""
-    return next(_text_model().embed([text])).tolist()
+    with measure_stage("text_embedding", model="nomic", items=1):
+        return next(_text_model().embed([text])).tolist()
 
 
 def embed_query(text):
     """Embed one question. Nomic's query prefix matters for retrieval."""
-    return next(_text_model().query_embed([text])).tolist()
+    with measure_stage("query_embedding", model="nomic", items=1):
+        return next(_text_model().query_embed([text])).tolist()
 
 
 def embed_crop(bgr):
     """Embed one OpenCV BGR crop with CLIP's vision tower. 512-d."""
     from PIL import Image
-    img = Image.fromarray(bgr[:, :, ::-1])
-    return next(_clip_vision().embed([img])).tolist()
+    with measure_stage("image_embedding", model="clip", items=1):
+        img = Image.fromarray(bgr[:, :, ::-1])
+        return next(_clip_vision().embed([img])).tolist()
 
 
 # Set another Whisper language code to teach in that language, or None to
@@ -90,7 +95,8 @@ def transcribe(wav_path, language=LANGUAGE):
     compare decoding settings without loading a second model.
     """
     kwargs = {"language": language} if language else {}
-    return _asr_model().recognize(wav_path, **kwargs).strip()
+    with measure_stage("transcription", model="whisper", language=language or "auto"):
+        return _asr_model().recognize(wav_path, **kwargs).strip()
 
 
 # warm_encoders runs on two threads per interaction (a background warm while
