@@ -252,6 +252,13 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self._send_json(self.app.confirm(label)
                                 if label else {"ok": False},
                                 200 if label else 400)
+            elif self.path.startswith("/voice/confirm"):
+                transcript = self._query("text", "")
+                result = self.app.confirm_transcript(transcript)
+                self._send_json(result, 200 if result["ok"] else 400)
+            elif self.path.startswith("/voice/discard"):
+                ok = self.app.discard_transcript()
+                self._send_json({"ok": ok}, 200 if ok else 409)
             elif self.path.startswith("/unignore"):
                 # the id travels as a string (point ids exceed 2^53); 0 on a
                 # malformed request misses harmlessly

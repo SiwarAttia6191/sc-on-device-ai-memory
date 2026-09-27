@@ -145,17 +145,27 @@ inference pass.
 
 File: `robot/device/live.py`, method `_process()`
 
-The flow after transcription depends on the action:
+After transcription, the browser shows an editable review field. The user can
+correct the recognized words, confirm them, or discard them and record again.
+The app does not teach or search memory until the transcript is confirmed.
+This human feedback step prevents a plausible ASR mistake from silently
+becoming a stored object name or an unintended memory query.
+
+The flow after confirmation depends on the action:
 
 ```text
 TEACH button
   -> record speech
   -> transcribe speech
+  -> review and optionally correct transcript
+  -> confirm transcript
   -> robot.teach(crop, transcript)
 
 ASK button
   -> record speech
   -> transcribe speech
+  -> review and optionally correct transcript
+  -> confirm transcript
   -> robot.ask(transcript)
 ```
 
@@ -166,7 +176,8 @@ For asking, the transcript is a natural-language question such as
 `"When did you last see my mug?"`. It is sent to `Robot.ask()`.
 
 The speech model does not itself understand the robot's memory. It only
-produces the text that the memory layer can process.
+produces draft text for the person to review and for the memory layer to
+process after confirmation.
 
 ## Phase 7: Use the Transcript in Memory
 

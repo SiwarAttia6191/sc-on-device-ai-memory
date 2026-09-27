@@ -125,6 +125,7 @@ class LiveApp:
         # A voice action is running: it owns the shared audio file, and
         # T/A are ignored until it finishes.
         self.busy = False
+        self.voice_review = None  # (action, transcript, teach target)
         self.pending_teach = None  # (crop, frame, box) stashed when teach starts
         self.pending_track = None  # ...and the track they came from
         self.stop = threading.Event()
@@ -145,7 +146,7 @@ class LiveApp:
     def _start_voice(self):
         """Claim the shared voice path if it is idle."""
         with self.lock:
-            if self.busy:
+            if self.busy or self.voice_review is not None:
                 return False
             self.busy = True
             return True
@@ -295,6 +296,10 @@ class LiveApp:
             "where": r.memory.where,
             "threshold": r.memory.threshold,
             "busy": self.busy,
+            "voice_review": ({
+                "action": "teach" if self.voice_review[0] == "t" else "ask",
+                "transcript": self.voice_review[1],
+            } if self.voice_review else None),
             "status": self.banner,
             "status_seq": self._banner_seq,
             # Let the button show whether teaching is currently available.
@@ -526,26 +531,54 @@ class LiveApp:
             # Model loading and transcription stay outside the live-state lock.
             models.warm_encoders()
             q = models.transcribe(wav)
+            with self.lock:
+                self.voice_review = (action, q, target)
+            self.banner = "check the transcript"
+        finally:
+            self._finish_voice()
+
+    def confirm_transcript(self, transcript):
+        """Use the reviewed transcript for teaching or memory recall."""
+        transcript = " ".join((transcript or "").split())[:500]
+        if not transcript:
+            return {"ok": False, "error": "transcript is empty"}
+        with self.lock:
+            if self.busy or self.voice_review is None:
+                return {"ok": False, "error": "no transcript to confirm"}
+            action, _, target = self.voice_review
+            self.voice_review = None
+            self.busy = True
+        try:
             if action == "t":
                 crop, frame, box = target
                 with self.lock:
-                    taught = self.robot.teach(crop, q, frame=frame, box=box)
+                    taught = self.robot.teach(
+                        crop, transcript, frame=frame, box=box)
                     self.mem_count = self.robot.memory.count()
                     if self.pending_track is not None:
-                        # Refresh only the track that supplied the taught crop.
                         self.pending_track.requery_now()
-                print(f'taught "{taught["label"]}": {taught["transcript"]!r}')
+                print(f'taught "{taught["label"]}": '
+                      f'{taught["transcript"]!r}')
                 self.card = ("taught", taught)
                 self.banner = f'taught: "{taught["label"]}"'
             else:
-                # Recall uses Memory's lock and does not touch track state.
-                res = self.robot.ask(q)
-                print(f"asked: {q!r}")
-                self.card = ("answer", (q, res))
+                res = self.robot.ask(transcript)
+                print(f"asked: {transcript!r}")
+                self.card = ("answer", (transcript, res))
                 self.banner = None
                 _speak(res)
+            return {"ok": True}
         finally:
             self._finish_voice()
+
+    def discard_transcript(self):
+        """Discard an unconfirmed transcript without changing memory."""
+        with self.lock:
+            if self.voice_review is None or self.busy:
+                return False
+            self.voice_review = None
+        self.banner = "transcript discarded"
+        return True
 
     # -- startup and shutdown --------------------------------------------------
 
