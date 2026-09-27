@@ -13,6 +13,7 @@ The printable enclosure does not include the electronics. If you want to build t
 | [Build Your Own Robot](build.md) | You want the complete Jetson, enclosure, phone, and headless setup. |
 | [Understand the Architecture](architecture.md) | You finished the course and want to follow the implementation. |
 | [Understand Speech Recognition](speech-recognition.md) | You want to follow the microphone, Whisper, and transcript pipeline. |
+| [Benchmark Speech Recognition](speech-benchmark.md) | You want to measure transcription errors such as `mouth` versus `mouse`. |
 
 ## Focused Guides
 

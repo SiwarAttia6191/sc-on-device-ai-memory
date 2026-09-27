@@ -18,6 +18,9 @@ edge-data/
 # Downloaded detector weights
 /yoloe-11l-seg-pf.pt
 
+# Private local speech recordings and benchmark manifests
+speech-benchmark/
+
 # Operating-system metadata
 .DS_Store
 Thumbs.db

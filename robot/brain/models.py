@@ -82,9 +82,14 @@ def embed_crop(bgr):
 LANGUAGE = "en"
 
 
-def transcribe(wav_path):
-    """Local Whisper speech-to-text on one WAV file."""
-    kwargs = {"language": LANGUAGE} if LANGUAGE else {}
+def transcribe(wav_path, language=LANGUAGE):
+    """Local Whisper speech-to-text on one WAV file.
+
+    ``language=None`` enables Whisper's automatic language detection. The
+    live app keeps the configured English default, while benchmarks can
+    compare decoding settings without loading a second model.
+    """
+    kwargs = {"language": language} if language else {}
     return _asr_model().recognize(wav_path, **kwargs).strip()
 
 
