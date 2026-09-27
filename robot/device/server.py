@@ -185,7 +185,8 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.end_headers()
             else:
                 self._404()
-        except (BrokenPipeError, ConnectionResetError, ssl.SSLEOFError):
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError,
+            ssl.SSLEOFError):
             pass  # tab closed or refreshed mid-stream
 
     def _stream(self):
