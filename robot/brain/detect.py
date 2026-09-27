@@ -141,7 +141,7 @@ class Detector:
     """YOLOE + BoT-SORT tracking + the stability gate."""
 
     def __init__(self, weights="yoloe-11l-seg-pf.pt", conf=CONF,
-                 max_area=MAX_AREA):
+                 max_area=MAX_AREA, face_landmarks=False):
         from pathlib import Path
 
         import torch
@@ -164,11 +164,12 @@ class Detector:
         # Live track blocks. Persisted ignore vectors survive track-id changes.
         # Replacing this dict gives lock-free readers a consistent snapshot.
         self._ignored = {}
-        try:
-            self.face_landmarks = FaceLandmarkDetector()
-        except Exception as exc:  # noqa: BLE001 - face support is optional
-            self.face_landmarks = None
-            print(f"face landmarks unavailable: {exc}", flush=True)
+        self.face_landmarks = None
+        if face_landmarks:
+            try:
+                self.face_landmarks = FaceLandmarkDetector()
+            except Exception as exc:  # noqa: BLE001 - face support is optional
+                print(f"face landmarks unavailable: {exc}", flush=True)
 
     def close(self):
         if self.face_landmarks is not None:

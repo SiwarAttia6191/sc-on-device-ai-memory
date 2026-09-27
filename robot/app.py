@@ -116,6 +116,9 @@ def main():
                     help="biggest proposal kept, as a frame fraction; the "
                          "default drops torso-sized boxes (.env "
                          "DETECT_MAX_AREA)")
+    ap.add_argument("--face-landmarks", action="store_true",
+                    help="enable optional MediaPipe eye and nose detection "
+                         "(install with `uv sync --extra face`)")
     ap.add_argument("--location", default=None,
                     help='place stamped on memories this session, e.g. '
                          '"Hotel room", read back by recall. Overrides the '
@@ -128,7 +131,8 @@ def main():
         shutil.rmtree(args.data)
         print(f"reset: cleared {args.data}")
     robot = Robot(data_dir=args.data, threshold=args.threshold,
-                  conf=args.conf, max_area=args.max_area, where=args.location)
+                  conf=args.conf, max_area=args.max_area, where=args.location,
+                  face_landmarks=args.face_landmarks)
     if args.source:
         replay(robot, args.source)
     else:

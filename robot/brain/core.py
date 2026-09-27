@@ -29,11 +29,12 @@ SCENE_PX = 480   # longest side; a phone card shows it about 170 px wide
 class Robot:
     def __init__(self, data_dir="edge-data", weights="yoloe-11l-seg-pf.pt",
                  threshold=RECOGNIZE_THRESHOLD, conf=None, max_area=None,
-                 where=None):
+                 where=None, face_landmarks=False):
         self.memory = Memory(data_dir, threshold=threshold, where=where)
         opts = {k: v for k, v in
                 (("conf", conf), ("max_area", max_area)) if v is not None}
-        self.detector = Detector(weights, **opts)
+        self.detector = Detector(
+            weights, face_landmarks=face_landmarks, **opts)
         self.thumbs = Path(data_dir) / "thumbs"
         self.thumbs.mkdir(exist_ok=True)
         self.events = []  # recent memory writes, for the on-screen log

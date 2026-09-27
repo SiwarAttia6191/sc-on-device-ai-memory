@@ -43,9 +43,8 @@ If the gap is negative, the two score ranges overlap and no threshold will separ
 YOLOE is a general object detector and does not reliably propose small facial
 parts as separate boxes. Install the optional MediaPipe Face Landmarker extra
 to add stable `left eye`, `right eye`, and `nose` crops to the live detection
-pipeline:
-
-Stop the robot first, then run this from the repository root:
+pipeline. Face landmarks are off by default. Stop the robot first, then install
+the optional dependency from the repository root:
 
 ```powershell
 uv sync --extra face
@@ -54,8 +53,16 @@ uv sync --extra face
 The first run downloads Google's face-landmarker task model to the user's
 local cache. Face landmarks are computed on-device, for one face at a time.
 `DETECT_CONF` and `DETECT_MIN_AREA` tune YOLOE only; they do not tune the
-landmark model. Once a feature box is
-stable, hold **TEACH** and say its label, for example "This is my nose". The
+landmark model. To enable landmarks for one run, add `--face-landmarks` to the
+normal start command. For example, reusing a Windows AppData shard:
+
+```powershell
+uv run python -m robot.app --data "$env:LOCALAPPDATA\qdrant-edge-memory" --location "Cafe" --face-landmarks
+```
+
+Omit `--face-landmarks` on runs where you do not want face-part boxes. The
+flag does not alter the memory shard or existing memories. Once a feature box
+is stable, hold **TEACH** and say its label, for example "This is my nose". The
 existing memory pipeline then stores and recognizes that crop like a taught
 view. The app can still run without this extra; in that case, ordinary YOLOE
 detection remains available and face-part boxes are disabled.

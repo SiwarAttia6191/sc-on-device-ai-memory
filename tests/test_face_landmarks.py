@@ -1,10 +1,23 @@
 import unittest
+import tempfile
 from types import SimpleNamespace
+from unittest.mock import patch
 
+from robot.brain.core import Robot
 from robot.brain.face_landmarks import FACE_PARTS, face_part_boxes
 
 
 class FacePartBoxTests(unittest.TestCase):
+    @patch("robot.brain.core.Detector")
+    @patch("robot.brain.core.Memory")
+    def test_robot_passes_face_landmark_option_to_detector(
+            self, memory, detector):
+        with tempfile.TemporaryDirectory() as data_dir:
+            Robot(data_dir=data_dir, face_landmarks=True)
+
+        detector.assert_called_once_with(
+            "yoloe-11l-seg-pf.pt", face_landmarks=True)
+
     def test_returns_eye_and_nose_regions_with_stable_ids(self):
         points = [SimpleNamespace(x=0.5, y=0.5) for _ in range(478)]
         centers = ((0.38, 0.40), (0.62, 0.40), (0.50, 0.55))
