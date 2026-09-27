@@ -40,6 +40,7 @@ def draw_feed(frame, tracks, focused):
         if t.last_query:
             tag = (f"{t.label}  {t.score:.2f}" if known
                    else f"{t.guess}?  {t.score:.2f}" if t.guess
-                   else f"UNKNOWN  {t.score:.2f}")
+                 else f"{t.hint.upper()}  {t.score:.2f}" if t.hint
+                 else f"UNKNOWN  {t.score:.2f}")
             _chip(frame, tag, (x1 + 4, max(30, y1 - 12)), color)
     return frame

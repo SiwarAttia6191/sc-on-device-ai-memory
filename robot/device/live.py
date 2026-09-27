@@ -307,6 +307,7 @@ class LiveApp:
             "focus": {
                 "label": focus.label,
                 "guess": focus.guess,  # near-miss label, display only
+                "hint": focus.hint,
                 "score": round(focus.score, 3),
                 "note": focus.note,
                 "thumb": Path(focus.thumb).name if focus.thumb else None,

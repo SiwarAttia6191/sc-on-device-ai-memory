@@ -315,4 +315,5 @@ class Robot:
         return n, ms
 
     def close(self):
+        self.detector.close()
         self.memory.close()

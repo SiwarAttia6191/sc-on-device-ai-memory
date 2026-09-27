@@ -38,6 +38,32 @@ If the gap is negative, the two score ranges overlap and no threshold will separ
 
 `DETECT_CONF` is the detector's confidence floor. Raise it to track less clutter.
 
+### Detect Eyes and the Nose
+
+YOLOE is a general object detector and does not reliably propose small facial
+parts as separate boxes. Install the optional MediaPipe Face Landmarker extra
+to add stable `left eye`, `right eye`, and `nose` crops to the live detection
+pipeline:
+
+Stop the robot first, then run this from the repository root:
+
+```powershell
+uv sync --extra face
+```
+
+The first run downloads Google's face-landmarker task model to the user's
+local cache. Face landmarks are computed on-device, for one face at a time.
+`DETECT_CONF` and `DETECT_MIN_AREA` tune YOLOE only; they do not tune the
+landmark model. Once a feature box is
+stable, hold **TEACH** and say its label, for example "This is my nose". The
+existing memory pipeline then stores and recognizes that crop like a taught
+view. The app can still run without this extra; in that case, ordinary YOLOE
+detection remains available and face-part boxes are disabled.
+
+Face-part crops are not biometric identity recognition. They are image crops
+of facial regions, and teaching them saves the corresponding image in the
+local memory shard. Use this only for people who have agreed to be recorded.
+
 `CAMERA_ROTATE` is `0` for an upright camera and `180` for an upside-down one. Set it before teaching anything: CLIP scores a rotated crop as a different object.
 
 `FRAME_CROP` removes a lens's black rim from the camera image. Use one fraction for every edge, or four in `left,top,right,bottom` order.

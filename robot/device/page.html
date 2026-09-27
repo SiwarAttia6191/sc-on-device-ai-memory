@@ -227,7 +227,8 @@
     curGuess = f && !f.label ? f.guess : null;
     $('label').textContent = f ? (f.label ||
         (curGuess ? curGuess + '? \u2014 tap to confirm'
-                  : 'UNKNOWN \u2014 hold TEACH'))
+            : f.hint ? f.hint.toUpperCase() + ' \u2014 hold TEACH'
+                 : 'UNKNOWN \u2014 hold TEACH'))
                                : 'looking\u2026';
     $('label').style.cursor = curGuess ? 'pointer' : '';
     $('label').style.background =

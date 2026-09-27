@@ -46,6 +46,9 @@ or worker threads.
   sighting writes. `teach` and `ask` implement the two voice actions.
 - `robot/brain/detect.py` runs YOLOE and BoT-SORT tracking. Detector class
   labels are deliberately ignored; names come from taught memory entries.
+- `robot/brain/face_landmarks.py` optionally uses MediaPipe Face Landmarker to
+  create eye and nose crops. Enable it with `uv sync --extra face`; the task
+  model is cached outside the repository.
 - `robot/brain/models.py` lazily loads the local CLIP, Nomic, and Whisper
   models. Avoid eager model loading in unit-test paths.
 - `robot/brain/memory.py` owns the embedded Qdrant Edge shard. Taught views

@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 
 from robot import config
+from robot.brain.face_landmarks import FaceLandmarkDetector
 
 os.environ.setdefault("YOLO_AUTOINSTALL", "false")  # no pip calls at runtime
 
@@ -121,6 +122,7 @@ class Track:
         self.score = 0.0
         self.vec = None        # last CLIP embedding of the crop
         self.sighted = False   # one "seen" memory per track, not per frame
+        self.hint = None       # face-landmark feature, otherwise absent
 
     @property
     def stable(self):
@@ -162,6 +164,16 @@ class Detector:
         # Live track blocks. Persisted ignore vectors survive track-id changes.
         # Replacing this dict gives lock-free readers a consistent snapshot.
         self._ignored = {}
+        try:
+            self.face_landmarks = FaceLandmarkDetector()
+        except Exception as exc:  # noqa: BLE001 - face support is optional
+            self.face_landmarks = None
+            print(f"face landmarks unavailable: {exc}", flush=True)
+
+    def close(self):
+        if self.face_landmarks is not None:
+            self.face_landmarks.close()
+            self.face_landmarks = None
 
     def warm(self):
         """Run one dummy inference so the first real frame is not the slow one."""
@@ -243,6 +255,37 @@ class Detector:
                             else None)
                     t.crop = padded_crop(frame, box, mask)
                     t.crop_q = q
+                seen_tids.add(tid)
+
+        if self.face_landmarks is not None:
+            try:
+                parts = self.face_landmarks.detect(frame, now)
+            except Exception as exc:  # noqa: BLE001 - keep object detection live
+                print(f"face landmarks disabled after runtime error: {exc}",
+                      flush=True)
+                self.close()
+                parts = []
+            for part in parts:
+                tid = part.track_id
+                if tid in self._ignored:
+                    continue
+                x1, y1, x2, y2 = part.box
+                area = (x2 - x1) * (y2 - y1) / (w * h)
+                if area <= 0 or area > self.max_area:
+                    continue
+                track = self.tracks.setdefault(tid, Track(tid))
+                track.hint = part.name
+                track.frames = min(track.frames + 1, STABLE_FRAMES + 1)
+                track.last_seen = now
+                track.box = part.box
+                cx = (x1 + x2) / 2 / w - 0.5
+                cy = (y1 + y2) / 2 / h - 0.5
+                track.salience = (area ** 0.5) * (
+                    1 - (cx * cx + cy * cy) ** 0.5)
+                quality = crop_quality(frame, part.box, 1.0)
+                if quality >= track.crop_q or track.crop is None:
+                    track.crop = padded_crop(frame, part.box)
+                    track.crop_q = quality
                 seen_tids.add(tid)
 
         for tid, t in list(self.tracks.items()):
