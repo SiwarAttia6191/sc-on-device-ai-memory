@@ -41,10 +41,13 @@ transcripts in its local Qdrant shard as part of its intended memory behavior.
 
 ## Capture a Session
 
-In PowerShell, redirect standard error to a private local log file:
+In PowerShell, create a durable, private reports directory and redirect
+standard error to a local log file there:
 
 ```powershell
-uv run python -m robot.app --data "$env:LOCALAPPDATA\qdrant-edge-memory" 2> "$env:TEMP\robot-metrics.jsonl"
+$reports = Join-Path $env:LOCALAPPDATA 'qdrant-edge-memory-reports'
+New-Item -ItemType Directory -Path $reports -Force | Out-Null
+uv run python -m robot.app --data "$env:LOCALAPPDATA\qdrant-edge-memory" 2> "$reports\robot-metrics.jsonl"
 ```
 
 The log contains diagnostics and timing data, not audio or transcript content.
@@ -58,16 +61,72 @@ PowerShell wrapped across console-width lines. It ignores non-JSON warnings
 instead of copying their text into the report.
 
 ```powershell
+$reports = Join-Path $env:LOCALAPPDATA 'qdrant-edge-memory-reports'
 uv run python testdata/metrics_dashboard.py `
-	--input "$env:TEMP\robot-metrics.jsonl" `
-	--output "$env:TEMP\robot-metrics-dashboard.html"
-explorer "$env:TEMP\robot-metrics-dashboard.html"
+	--input "$reports\robot-metrics.jsonl" `
+	--output "$reports\robot-metrics-dashboard.html"
 ```
 
 The HTML is self-contained and generated locally. It shows stage sample counts,
 median/p95/maximum latency, median process CPU delta, and event counts. Current
 events do not contain timestamps, so the dashboard compares distributions and
 does not invent a time-series chart.
+
+### Open the dashboard at a local URL
+
+The report file persists in `%LOCALAPPDATA%`, but an HTTP URL is available only
+while a local web server is running. Start this command in a separate PowerShell
+terminal and leave that terminal open:
+
+```powershell
+$reports = Join-Path $env:LOCALAPPDATA 'qdrant-edge-memory-reports'
+Set-Location $reports
+python -m http.server 8769 --bind 127.0.0.1
+```
+
+Then visit:
+
+```text
+http://127.0.0.1:8769/robot-metrics-dashboard.html
+```
+
+If port `8769` is already in use, choose another port in both the command and
+URL. If the server stops or Windows restarts, the report remains on disk; run
+the server command again to restore the URL. The dashboard uses aggregate
+metrics only and cannot identify a specific saved memory. Browse actual
+objects, taught views, and sightings in the robot app's **MEMORY** tab, using
+the same `--data` shard path.
+
+### What a "sample" means
+
+A stage sample is **one timed invocation of a software stage**, not a training
+example, detected object, photo, or Qdrant memory record. For example, one
+camera frame can generate one YOLOE call and one face-landmark call; later, a
+stable crop can generate an image-embedding call and a memory-search call.
+The same object may therefore contribute many stage calls while it remains in
+view. A retrieval call is a search and does not itself save a memory.
+
+The dashboard explains each stage beside its count. Read the metrics according
+to the stage: detection/landmark calls are frame processing; embedding calls
+are vector creation; retrieval calls are searches. `face_found` and
+`no_face_found` count changes between found/not-found states, not the total
+number of faces in all frames.
+
+### Browse saved memories
+
+The dashboard does not contain a memory-browser export. To see saved objects,
+taught views, and later sightings, start the robot with the same shard path
+used when those memories were created, then choose **MEMORY** in the app:
+
+```powershell
+uv run python -m robot.app --data "$env:LOCALAPPDATA\qdrant-edge-memory"
+```
+
+Metrics intentionally omit object labels and memory IDs for privacy. As a
+result, you cannot match an individual timing sample to one specific image or
+Qdrant record. Compare aggregate stage-call totals with the object, taught-view,
+and sighting counts shown by the app, but do not expect those numbers to equal
+each other.
 
 ## Next Measurement Step
 

@@ -14,6 +14,17 @@ import statistics
 from collections import Counter, defaultdict
 from pathlib import Path
 
+STAGE_HELP = {
+    "object_detection": "One YOLOE detection and tracking pass over a camera frame. It does not mean an object was saved.",
+    "face_landmarks": "One MediaPipe face-landmark pass. Face-found events are state changes, not counts of faces or memories.",
+    "image_embedding": "One image crop converted to a CLIP vector. A crop can be embedded repeatedly; this is not a taught-view count.",
+    "text_embedding": "One text description converted to a Nomic vector, usually during teaching.",
+    "query_embedding": "One spoken question converted to a Nomic query vector.",
+    "transcription": "One recording transcribed by Whisper. Audio and transcript text are not included in metrics.",
+    "image_retrieval": "One image-vector search against Qdrant memory. A search does not create a memory.",
+    "text_retrieval": "One text-vector search against Qdrant memory. A search does not create a memory.",
+}
+
 
 def percentile(values, fraction):
     """Linearly interpolated percentile for a non-empty list of numbers."""
@@ -124,9 +135,11 @@ def render_dashboard(summary, source_name):
         median_width = max(1.0, row["median_ms"] / largest_p95 * 100)
         p95_width = max(1.0, row["p95_ms"] / largest_p95 * 100)
         cpu = "n/a" if row["cpu_median_ms"] is None else _ms(row["cpu_median_ms"])
+        description = STAGE_HELP.get(
+                        row["stage"], "One timed invocation of this pipeline stage.")
         rows.append(f"""
           <tr>
-            <th scope="row">{html.escape(row['stage'])}<small>{row['count']:,} samples</small></th>
+                        <th scope="row">{html.escape(row['stage'])}<small>{row['count']:,} calls · {html.escape(description)}</small></th>
             <td>{_ms(row['median_ms'])}<div class="bar"><i class="median" style="width:{median_width:.2f}%"></i></div></td>
             <td>{_ms(row['p95_ms'])}<div class="bar"><i class="p95" style="width:{p95_width:.2f}%"></i></div></td>
             <td>{_ms(row['max_ms'])}</td>
@@ -172,7 +185,7 @@ section {{ margin-top:18px; padding:20px; overflow:hidden }} h2 {{ margin:0 0 4p
 <body><main>
 <header><div><div class="eyebrow">Local observability · aggregate report</div><h1>AI pipeline performance</h1></div><div class="source">Source file<br><b>{source}</b></div></header>
 <div class="cards">
-  <div class="card"><span>Stage samples</span><strong>{summary['stage_samples']:,}</strong></div>
+    <div class="card"><span>Timed stage calls</span><strong>{summary['stage_samples']:,}</strong></div>
   <div class="card"><span>Stages observed</span><strong>{len(stage_rows):,}</strong></div>
   <div class="card"><span>Outcome events</span><strong>{sum(v for k,v in summary['events'].items() if k != 'ai_stage'):,}</strong></div>
   <div class="card"><span>Non-JSON lines skipped</span><strong>{summary['ignored_lines']:,}</strong></div>
@@ -182,6 +195,10 @@ section {{ margin-top:18px; padding:20px; overflow:hidden }} h2 {{ margin:0 0 4p
 <div class="table-wrap"><table><thead><tr><th>Stage</th><th>Median</th><th>p95</th><th>Max</th><th>Median CPU delta</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>
 <p class="note">Bars share one scale based on the slowest p95. This log has no event timestamps, so this report compares distributions, not time-of-day trends. First-use model loading can make early embedding samples much slower.</p></section>
 <section><h2>Outcome events</h2><p class="sub">Counts from content-free event records.</p><div class="events">{''.join(event_cards)}</div></section>
+    <section><h2>Find saved memories</h2>
+    <p>A timed stage call is not an object, photo, or database record. Detection, landmarks, embeddings, and retrieval may run many times while the camera watches the same object. Retrieval measures a search; it does not save anything by itself.</p>
+    <p>To browse saved objects, taught views, and sightings, open <a href="http://127.0.0.1:8765/">the robot app</a> and choose <b>MEMORY</b>. The app must be running with the same <code>--data</code> directory as the shard you want to inspect.</p>
+    <p class="note">Metrics intentionally omit object labels and memory IDs for privacy, so this dashboard cannot link one timing call to a specific saved image. Compare aggregate calls with the separate object/view/sighting counts in MEMORY; they are different measures and are not expected to match.</p></section>
 <p class="note">Generated locally from JSONL. Non-JSON startup diagnostics were ignored and their text was not copied into this report.</p>
 </main></body></html>"""
 
